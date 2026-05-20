@@ -1,0 +1,736 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- // TITULO DEL JUEGO (Podés cambiar "El Tesoro de Poseidon" por el nombre que quieras acá) -->
+    <title>El Tesoro de Poseidon</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #001f3f, #0083b0);
+            color: white;
+            margin: 0;
+            padding: 10px;
+            min-height: 100vh;
+            touch-action: manipulation;
+            overflow-x: hidden;
+        }
+        
+        h1 {
+            margin-top: 5px;
+            font-size: 1.8em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 10px;
+            margin: 0 auto 10px auto;
+            max-width: 95%;
+            font-size: 1em;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .stats span { display: flex; flex-direction: column; }
+        .stats strong { font-size: 1.2em; color: #00f2fe; }
+
+        #game-board {
+            width: 95vw;
+            max-width: 500px;
+            height: 45vh;
+            max-height: 400px;
+            background-color: rgba(0, 30, 60, 0.6);
+            margin: 0 auto;
+            position: relative;
+            border: 3px solid #00f2fe;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.5);
+            transition: background-color 0.1s, box-shadow 0.3s;
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><text y='24' font-size='24'>🔱</text></svg>") 16 16, crosshair;
+        }
+
+        /* --- TIBURÓN --- */
+        #target {
+            font-size: 3rem;
+            position: absolute;
+            display: none;
+            user-select: none;
+            -webkit-user-select: none;
+            width: 60px;
+            height: 60px;
+            line-height: 60px;
+            text-align: center;
+            z-index: 5; /* Z-Index 5: Queda por debajo de la ballena */
+        }
+        #target:active { transform: scale(0.7); }
+
+        /* --- BALLENA (Nivel 8+) --- */
+        #whale {
+            font-size: 4rem;
+            position: absolute;
+            display: none;
+            user-select: none;
+            -webkit-user-select: none;
+            width: 80px;
+            height: 80px;
+            line-height: 80px;
+            text-align: center;
+            z-index: 6; /* Z-Index 6: Escuda al tiburón. Si le das clic, cuenta como fallo (agua) */
+            pointer-events: auto;
+        }
+
+        /* --- EVENTOS ESPECIALES --- */
+        #treasure {
+            font-size: 2.5rem;
+            position: absolute;
+            display: none;
+            cursor: pointer;
+            z-index: 10;
+            animation: bounce 0.5s infinite alternate;
+            user-select: none;
+        }
+
+        #trident-event {
+            font-size: 5rem;
+            position: absolute;
+            display: none;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            text-shadow: 0 0 20px #ffd700, 0 0 40px #ffd700;
+            animation: pulse 1s infinite alternate;
+            cursor: pointer;
+            z-index: 20;
+            user-select: none;
+        }
+
+        /* --- MODAL DE VICTORIA (NIVEL 20) --- */
+        #victory-modal {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 30, 60, 0.95);
+            border: 3px solid #ffd700;
+            padding: 20px;
+            border-radius: 15px;
+            z-index: 100;
+            width: 85%;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+        }
+
+        #victory-modal h2 { color: #ffd700; margin-top: 0; }
+        
+        .modal-btn {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 1.1em;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #btn-si { background-color: #2ecc71; color: white; }
+        #btn-no { background-color: #e74c3c; color: white; }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+
+        @keyframes pulse {
+            from { transform: translate(-50%, -50%) scale(1); }
+            to { transform: translate(-50%, -50%) scale(1.2); }
+        }
+
+        .floating-msg {
+            position: absolute;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            text-shadow: 1px 1px 2px black;
+            transition: opacity 0.3s, transform 0.4s;
+            z-index: 30;
+        }
+
+        .leaderboard {
+            background-color: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            max-width: 500px;
+            margin: 15px auto;
+            padding: 15px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .leaderboard h3 { margin: 0 0 10px 0; color: #ffd700; }
+        .leaderboard ol { padding-left: 25px; margin: 0; text-align: left; }
+        .leaderboard li {
+            font-size: 1.1em;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 3px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .record-details { font-size: 0.85em; color: #ccc; }
+
+        #start-btn {
+            padding: 12px 25px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #ff416c;
+            border: none;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin-top: 10px;
+            width: 80%;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- // TITULO PRINCIPAL VISUAL (Modificá "El Tesoro de Poseidon" a tu gusto) -->
+    <h1>⚓ El Tesoro de Poseidon ⚓</h1>
+    
+    <div class="stats">
+        <span>Nivel <strong id="level">1</strong></span>
+        <span>Tiempo <strong id="time">60</strong>s</span>
+        <span>Puntos <strong id="score">0</strong></span>
+    </div>
+    
+    <div id="game-board">
+        <div id="target">🦈</div>
+        <div id="whale">🐋</div>
+        <div id="treasure">💰</div>
+        <div id="trident-event">🔱</div>
+        <div id="msg-container"></div>
+
+        <!-- Pantalla de Victoria Nivel 20 -->
+        <div id="victory-modal">
+            <h2>¡HAS CONQUISTADO LOS 7 MARES!</h2>
+            <p>Has llegado al Nivel 20. El juego ha terminado formalmente.</p>
+            <p>¿Quieres continuar en <strong>Modo Infinito</strong>?</p>
+            <button class="modal-btn" id="btn-si">SÍ</button>
+            <button class="modal-btn" id="btn-no">NO</button>
+        </div>
+    </div>
+
+    <button id="start-btn">Jugar (60s)</button>
+
+    <div class="leaderboard">
+        <h3>🏆 Top 5 Cazadores 🏆</h3>
+        <ol id="top-5-list"></ol>
+    </div>
+
+    <script>
+        // Variables principales
+        let score = 0;
+        let totalHits = 0;
+        let level = 1;
+        let timeLeft = 60;
+        let totalSecondsPlayed = 0;
+        let isPlaying = false;
+        let endlessMode = false; // Controla si ya pasamos el nivel 20
+        
+        let gameTimer;
+        let animationFrame;
+        
+        // Físicas Tiburón
+        let posX = 0, posY = 0, velX = 0, velY = 0;
+
+        // Físicas Ballena
+        let whaleActive = false;
+        let whalePosX = 0, whalePosY = 0;
+
+        // Sistemas de Racha y Poseidón
+        let consecutiveHits = 0;
+        let streakSlowActive = false;
+        let streakTimer;
+        
+        let poseidonActive = false;
+        let nextPoseidonTime = 0;
+        let skillPoseidonCount = 0; 
+        let isKingEvent = false;    
+
+        // Buffs Permanentes (Late Game)
+        let permSpeedDiscount = 0;
+        let permPenaltyDiscount = 0;
+        let permExtraSeconds = 0;
+
+        // Referencias DOM
+        const scoreDisplay = document.getElementById('score');
+        const levelDisplay = document.getElementById('level');
+        const timeDisplay = document.getElementById('time');
+        const target = document.getElementById('target');
+        const whale = document.getElementById('whale');
+        const treasure = document.getElementById('treasure');
+        const tridentEvent = document.getElementById('trident-event');
+        const startBtn = document.getElementById('start-btn');
+        const gameBoard = document.getElementById('game-board');
+        const msgContainer = document.getElementById('msg-container');
+        const leaderboardList = document.getElementById('top-5-list');
+        const victoryModal = document.getElementById('victory-modal');
+
+        // Leaderboard
+        let defaultLeaderboard = [
+            {name: "Poseidón", score: 5000, time: 180},
+            {name: "Capitán", score: 3000, time: 120},
+            {name: "Marinero", score: 1500, time: 90},
+            {name: "Buzo", score: 800, time: 60},
+            {name: "Turista", score: 200, time: 30}
+        ];
+        let leaderBoard = JSON.parse(localStorage.getItem('tiburonPuntosTop5')) || defaultLeaderboard;
+
+        function updateLeaderboardUI() {
+            leaderboardList.innerHTML = '';
+            leaderBoard.forEach(entry => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${entry.name}</span> 
+                                <span class="record-details"><strong style="color:white">${entry.score} pts</strong> (${entry.time}s)</span>`;
+                leaderboardList.appendChild(li);
+            });
+        }
+        updateLeaderboardUI();
+
+        function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        function createFloatingMsg(x, y, text, color, persist = false, customSize = "1.2em") {
+            const msg = document.createElement('div');
+            msg.className = 'floating-msg';
+            msg.innerHTML = text; 
+            msg.style.color = color;
+            msg.style.left = typeof x === 'number' ? `${x}px` : x;
+            msg.style.top = typeof y === 'number' ? `${y}px` : y;
+            msg.style.fontSize = customSize;
+            
+            if(typeof x === 'string') msg.style.transform = 'translate(-50%, -50%)';
+            
+            msgContainer.appendChild(msg);
+            void msg.offsetWidth; 
+            
+            msg.style.opacity = 1;
+            if(typeof x === 'number') msg.style.transform = "translateY(-30px)";
+
+            if (!persist) {
+                setTimeout(() => {
+                    msg.style.opacity = 0;
+                    setTimeout(() => msg.remove(), 400);
+                }, 800);
+            }
+            return msg;
+        }
+
+        function updateSpeed(forceRandomAngle = false) {
+            let baseSpeed = Math.max(1, 2 + (level * 0.5) - permSpeedDiscount); 
+            if (poseidonActive) baseSpeed *= 0.35; 
+            else if (streakSlowActive) baseSpeed *= 0.65; 
+            
+            let currentMag = Math.sqrt(velX*velX + velY*velY);
+            
+            if (currentMag === 0 || forceRandomAngle) {
+                let angle = Math.random() * Math.PI * 2;
+                velX = Math.cos(angle) * baseSpeed;
+                velY = Math.sin(angle) * baseSpeed;
+            } else {
+                velX = (velX / currentMag) * baseSpeed;
+                velY = (velY / currentMag) * baseSpeed;
+            }
+        }
+
+        function triggerPoseidon(duration = 5000, message = "¡HORA DE POSEIDÓN!") {
+            poseidonActive = true;
+            target.textContent = '👑';
+            gameBoard.style.boxShadow = '0 0 30px rgba(255, 215, 0, 0.9)';
+            gameBoard.style.borderColor = '#ffd700';
+            updateSpeed();
+            
+            createFloatingMsg(gameBoard.clientWidth/2 - 70, gameBoard.clientHeight/2, message, "#ffd700");
+
+            setTimeout(() => {
+                if (!isPlaying) return;
+                poseidonActive = false;
+                target.textContent = '🦈';
+                gameBoard.style.boxShadow = '0 0 15px rgba(0, 242, 254, 0.5)';
+                gameBoard.style.borderColor = '#00f2fe';
+                updateSpeed();
+                if (duration === 5000) nextPoseidonTime = totalSecondsPlayed + getRandomInt(15, 45);
+            }, duration);
+        }
+
+        function spawnTreasure() {
+            const maxX = gameBoard.clientWidth - 50;
+            const maxY = gameBoard.clientHeight - 50;
+            treasure.style.left = `${Math.random() * maxX}px`;
+            treasure.style.top = `${Math.random() * maxY}px`;
+            treasure.style.display = 'block';
+        }
+
+        function spawnWhale() {
+            whaleActive = true;
+            whale.style.display = 'block';
+            
+            // Aparece lejos del tiburón
+            whalePosX = posX > gameBoard.clientWidth/2 ? 0 : gameBoard.clientWidth - 80;
+            whalePosY = posY > gameBoard.clientHeight/2 ? 0 : gameBoard.clientHeight - 80;
+            
+            createFloatingMsg('50%', '15%', "¡CUIDADO CON LA BALLENA!", "#bdc3c7", false, "1em");
+            
+            setTimeout(() => {
+                whaleActive = false;
+                whale.style.display = 'none';
+            }, 5000);
+        }
+
+        function triggerKingOfTheSeas() {
+            isKingEvent = true;
+            target.style.display = 'none';
+            treasure.style.display = 'none';
+            whale.style.display = 'none'; // Desaparece la ballena si está activa
+            tridentEvent.style.display = 'block';
+            
+            gameBoard.style.boxShadow = '0 0 50px rgba(255, 215, 0, 1)';
+            createFloatingMsg('50%', '30%', "¡ERES EL REY DE LOS MARES!<br><span style='font-size:0.5em;color:white'>Haz clic en el tridente</span>", "#ffd700", false, "1.5em");
+        }
+
+        // --- SISTEMA DE PAUSA Y VICTORIA ---
+        function triggerVictory() {
+            isPlaying = false;
+            clearInterval(gameTimer);
+            cancelAnimationFrame(animationFrame);
+            victoryModal.style.display = 'block';
+        }
+
+        document.getElementById('btn-si').addEventListener('click', () => {
+            victoryModal.style.display = 'none';
+            endlessMode = true; // Activa modo infinito
+            isPlaying = true;
+            
+            // Reanuda el bucle y el temporizador
+            gameLoop();
+            gameTimer = setInterval(timerLogic, 1000);
+        });
+
+        document.getElementById('btn-no').addEventListener('click', () => {
+            victoryModal.style.display = 'none';
+            endGame(true); // Termina el juego formalmente indicando victoria
+        });
+
+
+        function gameLoop() {
+            if (!isPlaying || isKingEvent) {
+                if (isPlaying) animationFrame = requestAnimationFrame(gameLoop);
+                return; 
+            }
+
+            const maxX = gameBoard.clientWidth - target.clientWidth;
+            const maxY = gameBoard.clientHeight - target.clientHeight;
+
+            // Movimiento Tiburón
+            posX += velX;
+            posY += velY;
+
+            if (posX <= 0) { posX = 0; velX *= -1; }
+            if (posX >= maxX) { posX = maxX; velX *= -1; }
+            if (posY <= 0) { posY = 0; velY *= -1; }
+            if (posY >= maxY) { posY = maxY; velY *= -1; }
+
+            target.style.left = `${posX}px`;
+            target.style.top = `${posY}px`;
+
+            // Movimiento Ballena (Sigue al tiburón pero más lento)
+            if (whaleActive) {
+                let dx = posX - whalePosX;
+                let dy = posY - whalePosY;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist > 0) {
+                    let currentMag = Math.sqrt(velX*velX + velY*velY);
+                    let whaleSpeed = currentMag * 0.55; // 55% de la velocidad del tiburón
+                    
+                    whalePosX += (dx / dist) * whaleSpeed;
+                    whalePosY += (dy / dist) * whaleSpeed;
+                    
+                    whale.style.left = `${whalePosX}px`;
+                    whale.style.top = `${whalePosY}px`;
+                }
+            }
+
+            animationFrame = requestAnimationFrame(gameLoop);
+        }
+
+        function catchShark(e) {
+            e.preventDefault(); e.stopPropagation(); 
+            if (!isPlaying || isKingEvent) return;
+
+            let previousLevel = level;
+
+            totalHits++;
+            consecutiveHits++;
+            level = Math.floor(totalHits / 10) + 1;
+            levelDisplay.textContent = level;
+
+            let pointsEarned = Math.floor(6 * level); 
+            if (poseidonActive) pointsEarned = Math.floor(pointsEarned * Math.max(1.2, level * 0.6));
+            score += pointsEarned;
+            
+            let timeBonus = Math.max(1, Math.floor((level - 1) * 0.6)) + permExtraSeconds; 
+            if (poseidonActive) timeBonus = Math.floor(timeBonus * 1.2); 
+            timeLeft += timeBonus;
+            
+            scoreDisplay.textContent = score;
+            timeDisplay.textContent = timeLeft;
+            
+            createFloatingMsg(posX, posY - 10, `+${pointsEarned}pts`, "#ffd700");
+            createFloatingMsg(posX, posY + 15, `+${timeBonus}s`, "#2ecc71");
+            
+            if (consecutiveHits === 7 && !poseidonActive) {
+                streakSlowActive = true;
+                updateSpeed();
+                createFloatingMsg(posX - 20, posY - 30, "¡ATURDIDO!", "#00f2fe");
+                clearTimeout(streakTimer);
+                streakTimer = setTimeout(() => { streakSlowActive = false; if(isPlaying) updateSpeed(); }, 4000); 
+            }
+
+            if (consecutiveHits > 0) {
+                if (consecutiveHits === 20 && skillPoseidonCount === 1) triggerKingOfTheSeas();
+                else if (consecutiveHits === 15) spawnTreasure();
+                else if (consecutiveHits === 10) {
+                    triggerPoseidon(8000, "¡INVOCASTE A POSEIDON!");
+                    skillPoseidonCount++;
+                }
+            }
+            
+            const maxX = gameBoard.clientWidth - target.clientWidth;
+            const maxY = gameBoard.clientHeight - target.clientHeight;
+            posX = Math.random() * maxX;
+            posY = Math.random() * maxY;
+            updateSpeed(true); 
+
+            // Verificar Condición de Victoria
+            if (level === 20 && previousLevel === 19 && !endlessMode) {
+                triggerVictory();
+            }
+        }
+
+        function collectTreasure(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (!isPlaying || isKingEvent) return;
+
+            let randomPts = getRandomInt(300, 600);
+            score += randomPts;
+            timeLeft += 18; 
+            scoreDisplay.textContent = score;
+            timeDisplay.textContent = timeLeft;
+
+            let rect = treasure.getBoundingClientRect();
+            let clickX = (e.clientX || e.touches[0].clientX) - gameBoard.getBoundingClientRect().left;
+            let clickY = (e.clientY || e.touches[0].clientY) - gameBoard.getBoundingClientRect().top;
+
+            createFloatingMsg(clickX - 30, clickY - 20, `+${randomPts}pts +18s`, "#ffd700");
+            createFloatingMsg('50%', '20%', "¡VENCISTE A POSEIDON!", "#ffd700");
+            treasure.style.display = 'none';
+        }
+
+        function claimKingBuffs(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (!isPlaying || !isKingEvent) return;
+
+            let numBuffs = getRandomInt(3, 5);
+            let pool = [
+                { apply: () => { let v = getRandomInt(18, 24); timeLeft += v; return `⏱️ +${v} Segundos`; } },
+                { apply: () => { let v = getRandomInt(600, 900); score += v; return `💎 +${v} Puntos`; } },
+                { apply: () => { permSpeedDiscount += 0.3; return `🐢 Tiburón más Lento`; } },
+                { apply: () => { permPenaltyDiscount += 1.2; return `🛡️ Menos penalización`; } },
+                { apply: () => { permExtraSeconds += 3; return `⏳ +3s extra por acierto`; } }
+            ];
+            
+            pool.sort(() => 0.5 - Math.random()); 
+            let msgs = [];
+            for (let i = 0; i < numBuffs; i++) msgs.push(pool[i].apply());
+
+            scoreDisplay.textContent = score;
+            timeDisplay.textContent = timeLeft;
+
+            let buffHTML = msgs.join("<br>");
+            let buffDisplay = createFloatingMsg('50%', '50%', buffHTML, "#00f2fe", true, "1.1em");
+            buffDisplay.style.textShadow = '0 0 10px rgba(0,0,0,0.8)';
+            buffDisplay.style.lineHeight = '1.8';
+            setTimeout(() => buffDisplay.remove(), 4000);
+
+            tridentEvent.style.display = 'none';
+            isKingEvent = false;
+            consecutiveHits = -7; 
+            skillPoseidonCount = 0; 
+            
+            gameBoard.style.boxShadow = '0 0 15px rgba(0, 242, 254, 0.5)';
+            target.style.display = 'block'; 
+            updateSpeed(true);
+        }
+
+        function missClick(e) {
+            e.preventDefault();
+            if (!isPlaying || isKingEvent) return;
+            
+            if (poseidonActive) {
+                createFloatingMsg((e.clientX || e.touches[0].clientX) - gameBoard.getBoundingClientRect().left, (e.clientY || e.touches[0].clientY) - gameBoard.getBoundingClientRect().top, "¡Salvado!", "#ffd700");
+                return; 
+            }
+
+            consecutiveHits = 0; 
+            streakSlowActive = false;
+            skillPoseidonCount = 0;
+            treasure.style.display = 'none'; 
+            updateSpeed();
+
+            let penalty = Math.max(1, level - Math.floor(permPenaltyDiscount)); 
+            timeLeft -= penalty;
+            if (timeLeft < 0) timeLeft = 0;
+            timeDisplay.textContent = timeLeft;
+
+            gameBoard.style.backgroundColor = "rgba(255, 0, 0, 0.5)";
+            setTimeout(() => {
+                if(isPlaying && !isKingEvent) gameBoard.style.backgroundColor = "rgba(0, 30, 60, 0.6)";
+            }, 150);
+
+            let rect = gameBoard.getBoundingClientRect();
+            let clickX = (e.clientX || e.touches[0].clientX) - rect.left;
+            let clickY = (e.clientY || e.touches[0].clientY) - rect.top;
+
+            createFloatingMsg(clickX - 15, clickY - 15, `-${penalty}s`, "#ff416c");
+
+            if (timeLeft === 0) endGame(false);
+        }
+
+        target.addEventListener('touchstart', catchShark, {passive: false});
+        target.addEventListener('mousedown', catchShark);
+        
+        treasure.addEventListener('touchstart', collectTreasure, {passive: false});
+        treasure.addEventListener('mousedown', collectTreasure);
+        
+        tridentEvent.addEventListener('touchstart', claimKingBuffs, {passive: false});
+        tridentEvent.addEventListener('mousedown', claimKingBuffs);
+        
+        gameBoard.addEventListener('touchstart', missClick, {passive: false});
+        gameBoard.addEventListener('mousedown', missClick);
+
+        function endGame(isVictory = false) {
+            isPlaying = false;
+            isKingEvent = false;
+            clearInterval(gameTimer);
+            cancelAnimationFrame(animationFrame);
+            
+            target.style.display = 'none';
+            treasure.style.display = 'none';
+            tridentEvent.style.display = 'none';
+            whale.style.display = 'none';
+            victoryModal.style.display = 'none';
+            
+            startBtn.style.display = 'inline-block';
+            startBtn.textContent = 'Volver a Jugar';
+            
+            target.textContent = '🦈';
+            gameBoard.style.backgroundColor = "rgba(0, 30, 60, 0.6)";
+            gameBoard.style.boxShadow = '0 0 15px rgba(0, 242, 254, 0.5)';
+            gameBoard.style.borderColor = '#00f2fe';
+
+            let lowestTop5Score = leaderBoard[leaderBoard.length - 1].score;
+            
+            if (score > lowestTop5Score || leaderBoard.length < 5) {
+                setTimeout(() => {
+                    let playerName = prompt(`¡CAPITÁN DE LOS 7 MARES!\nLograste ${score} pts sobreviviendo ${totalSecondsPlayed}s.\nIngresa tu nombre (máx 10 letras):`);
+                    if (!playerName || playerName.trim() === "") playerName = "Anónimo";
+                    playerName = playerName.substring(0, 10).trim();
+                    
+                    leaderBoard.push({name: playerName, score: score, time: totalSecondsPlayed});
+                    leaderBoard.sort((a, b) => b.score - a.score || b.time - a.time); 
+                    leaderBoard = leaderBoard.slice(0, 5);
+                    
+                    localStorage.setItem('tiburonPuntosTop5', JSON.stringify(leaderBoard));
+                    updateLeaderboardUI();
+                }, 100); 
+            } else {
+                if (isVictory) {
+                    alert(`¡RETIRADA TRIUNFAL!\nTe fuiste en la cima con ${score} puntos y sobreviviste ${totalSecondsPlayed}s.`);
+                } else {
+                    alert(`¡EL MAR HA RECLAMADO LO SUYO!\nSobreviviste ${totalSecondsPlayed}s y lograste ${score} puntos (Nivel ${level}).`);
+                }
+            }
+        }
+
+        function timerLogic() {
+            if(isKingEvent) return; 
+
+            timeLeft--;
+            totalSecondsPlayed++;
+            timeDisplay.textContent = timeLeft;
+            
+            if (!poseidonActive && totalSecondsPlayed >= nextPoseidonTime) {
+                if (level >= 5 || totalSecondsPlayed >= 15) triggerPoseidon(); 
+                else nextPoseidonTime++; 
+            }
+
+            // Lógica de Spawn de Ballena (Nivel 8+, 15% de probabilidad cada segundo si no hay una activa)
+            if (level >= 8 && !whaleActive && Math.random() < 0.15) {
+                spawnWhale();
+            }
+
+            if (timeLeft <= 0) endGame(false);
+        }
+
+        startBtn.addEventListener('click', function() {
+            score = 0;
+            totalHits = 0;
+            level = 1;
+            timeLeft = 60;
+            totalSecondsPlayed = 0;
+            endlessMode = false;
+            
+            consecutiveHits = 0;
+            skillPoseidonCount = 0;
+            poseidonActive = false;
+            streakSlowActive = false;
+            isKingEvent = false;
+            whaleActive = false;
+
+            permSpeedDiscount = 0;
+            permPenaltyDiscount = 0;
+            permExtraSeconds = 0;
+            
+            isPlaying = true;
+            
+            scoreDisplay.textContent = score;
+            levelDisplay.textContent = level;
+            timeDisplay.textContent = timeLeft;
+            
+            startBtn.style.display = 'none';
+            target.style.display = 'block';
+            whale.style.display = 'none';
+            
+            posX = Math.random() * (gameBoard.clientWidth - 60);
+            posY = Math.random() * (gameBoard.clientHeight - 60);
+            
+            nextPoseidonTime = getRandomInt(15, 45);
+            
+            velX = 0; velY = 0;
+            updateSpeed(true); 
+            gameLoop(); 
+
+            gameTimer = setInterval(timerLogic, 1000);
+        });
+    </script>
+</body>
+</html>
