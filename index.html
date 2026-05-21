@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- // TITULO DEL JUEGO (Podés cambiar "El Tesoro de Poseidon" por el nombre que quieras acá) -->
+    <!-- // TITULO DEL JUEGO -->
     <title>El Tesoro de Poseidon</title>
     <style>
         body {
@@ -69,9 +68,25 @@
             height: 60px;
             line-height: 60px;
             text-align: center;
-            z-index: 5; /* Z-Index 5: Queda por debajo de la ballena */
+            z-index: 5; 
         }
         #target:active { transform: scale(0.7); }
+
+        /* --- PEZ GLOBO (Nuevo: Nivel 1+) --- */
+        #pufferfish {
+            font-size: 3.5rem;
+            position: absolute;
+            display: none;
+            user-select: none;
+            -webkit-user-select: none;
+            width: 70px;
+            height: 70px;
+            line-height: 70px;
+            text-align: center;
+            z-index: 6; 
+            cursor: pointer;
+        }
+        #pufferfish:active { transform: scale(0.8); }
 
         /* --- BALLENA (Nivel 8+) --- */
         #whale {
@@ -84,7 +99,7 @@
             height: 80px;
             line-height: 80px;
             text-align: center;
-            z-index: 6; /* Z-Index 6: Escuda al tiburón. Si le das clic, cuenta como fallo (agua) */
+            z-index: 7; 
             pointer-events: auto;
         }
 
@@ -203,7 +218,7 @@
 </head>
 <body>
 
-    <!-- // TITULO PRINCIPAL VISUAL (Modificá "El Tesoro de Poseidon" a tu gusto) -->
+    <!-- // TITULO PRINCIPAL -->
     <h1>⚓ El Tesoro de Poseidon ⚓</h1>
     
     <div class="stats">
@@ -214,6 +229,7 @@
     
     <div id="game-board">
         <div id="target">🦈</div>
+        <div id="pufferfish">🐡</div>
         <div id="whale">🐋</div>
         <div id="treasure">💰</div>
         <div id="trident-event">🔱</div>
@@ -244,13 +260,18 @@
         let timeLeft = 60;
         let totalSecondsPlayed = 0;
         let isPlaying = false;
-        let endlessMode = false; // Controla si ya pasamos el nivel 20
+        let endlessMode = false;
         
         let gameTimer;
         let animationFrame;
         
         // Físicas Tiburón
         let posX = 0, posY = 0, velX = 0, velY = 0;
+
+        // Físicas Pez Globo
+        let pufferActive = false;
+        let pufferPosX = 0, pufferPosY = 0, pufferVelX = 0, pufferVelY = 0;
+        let pufferTimer;
 
         // Físicas Ballena
         let whaleActive = false;
@@ -276,6 +297,7 @@
         const levelDisplay = document.getElementById('level');
         const timeDisplay = document.getElementById('time');
         const target = document.getElementById('target');
+        const pufferfish = document.getElementById('pufferfish');
         const whale = document.getElementById('whale');
         const treasure = document.getElementById('treasure');
         const tridentEvent = document.getElementById('trident-event');
@@ -358,7 +380,7 @@
             gameBoard.style.borderColor = '#ffd700';
             updateSpeed();
             
-            createFloatingMsg(gameBoard.clientWidth/2 - 70, gameBoard.clientHeight/2, message, "#ffd700");
+            createFloatingMsg(gameBoard.clientWidth/2 - 90, gameBoard.clientHeight/2, message, "#ffd700");
 
             setTimeout(() => {
                 if (!isPlaying) return;
@@ -379,11 +401,30 @@
             treasure.style.display = 'block';
         }
 
+        // Spawn del Pez Globo
+        function spawnPufferfish() {
+            pufferActive = true;
+            pufferfish.style.display = 'block';
+            pufferPosX = Math.random() * (gameBoard.clientWidth - 70);
+            pufferPosY = Math.random() * (gameBoard.clientHeight - 70);
+            
+            // Se mueve un poco más lento que el tiburón
+            let baseSpeed = Math.max(1, 1.5 + (level * 0.3)); 
+            let angle = Math.random() * Math.PI * 2;
+            pufferVelX = Math.cos(angle) * baseSpeed;
+            pufferVelY = Math.sin(angle) * baseSpeed;
+
+            clearTimeout(pufferTimer);
+            pufferTimer = setTimeout(() => {
+                pufferActive = false;
+                pufferfish.style.display = 'none';
+            }, 5000); // Se queda 5 segundos en pantalla
+        }
+
         function spawnWhale() {
             whaleActive = true;
             whale.style.display = 'block';
             
-            // Aparece lejos del tiburón
             whalePosX = posX > gameBoard.clientWidth/2 ? 0 : gameBoard.clientWidth - 80;
             whalePosY = posY > gameBoard.clientHeight/2 ? 0 : gameBoard.clientHeight - 80;
             
@@ -399,14 +440,15 @@
             isKingEvent = true;
             target.style.display = 'none';
             treasure.style.display = 'none';
-            whale.style.display = 'none'; // Desaparece la ballena si está activa
+            whale.style.display = 'none'; 
+            pufferfish.style.display = 'none';
             tridentEvent.style.display = 'block';
             
             gameBoard.style.boxShadow = '0 0 50px rgba(255, 215, 0, 1)';
             createFloatingMsg('50%', '30%', "¡ERES EL REY DE LOS MARES!<br><span style='font-size:0.5em;color:white'>Haz clic en el tridente</span>", "#ffd700", false, "1.5em");
         }
 
-        // --- SISTEMA DE PAUSA Y VICTORIA ---
+        // --- SISTEMA DE PAUSA Y VICTORIA (Bug Solucionado) ---
         function triggerVictory() {
             isPlaying = false;
             clearInterval(gameTimer);
@@ -414,20 +456,27 @@
             victoryModal.style.display = 'block';
         }
 
-        document.getElementById('btn-si').addEventListener('click', () => {
+        // CORRECCIÓN: Botones de Sí y No usando mousedown/touchstart con stopPropagation
+        function continueInfinito(e) {
+            e.preventDefault(); e.stopPropagation();
             victoryModal.style.display = 'none';
-            endlessMode = true; // Activa modo infinito
+            endlessMode = true; 
             isPlaying = true;
-            
-            // Reanuda el bucle y el temporizador
             gameLoop();
             gameTimer = setInterval(timerLogic, 1000);
-        });
+        }
 
-        document.getElementById('btn-no').addEventListener('click', () => {
+        function terminarVictoria(e) {
+            e.preventDefault(); e.stopPropagation();
             victoryModal.style.display = 'none';
-            endGame(true); // Termina el juego formalmente indicando victoria
-        });
+            endGame(true); 
+        }
+
+        document.getElementById('btn-si').addEventListener('mousedown', continueInfinito);
+        document.getElementById('btn-si').addEventListener('touchstart', continueInfinito, {passive: false});
+
+        document.getElementById('btn-no').addEventListener('mousedown', terminarVictoria);
+        document.getElementById('btn-no').addEventListener('touchstart', terminarVictoria, {passive: false});
 
 
         function gameLoop() {
@@ -451,7 +500,24 @@
             target.style.left = `${posX}px`;
             target.style.top = `${posY}px`;
 
-            // Movimiento Ballena (Sigue al tiburón pero más lento)
+            // Movimiento Pez Globo
+            if (pufferActive) {
+                const maxPX = gameBoard.clientWidth - pufferfish.clientWidth;
+                const maxPY = gameBoard.clientHeight - pufferfish.clientHeight;
+                
+                pufferPosX += pufferVelX;
+                pufferPosY += pufferVelY;
+
+                if (pufferPosX <= 0) { pufferPosX = 0; pufferVelX *= -1; }
+                if (pufferPosX >= maxPX) { pufferPosX = maxPX; pufferVelX *= -1; }
+                if (pufferPosY <= 0) { pufferPosY = 0; pufferVelY *= -1; }
+                if (pufferPosY >= maxPY) { pufferPosY = maxPY; pufferVelY *= -1; }
+
+                pufferfish.style.left = `${pufferPosX}px`;
+                pufferfish.style.top = `${pufferPosY}px`;
+            }
+
+            // Movimiento Ballena
             if (whaleActive) {
                 let dx = posX - whalePosX;
                 let dy = posY - whalePosY;
@@ -459,7 +525,7 @@
                 
                 if (dist > 0) {
                     let currentMag = Math.sqrt(velX*velX + velY*velY);
-                    let whaleSpeed = currentMag * 0.55; // 55% de la velocidad del tiburón
+                    let whaleSpeed = currentMag * 0.55; 
                     
                     whalePosX += (dx / dist) * whaleSpeed;
                     whalePosY += (dy / dist) * whaleSpeed;
@@ -509,6 +575,7 @@
                 if (consecutiveHits === 20 && skillPoseidonCount === 1) triggerKingOfTheSeas();
                 else if (consecutiveHits === 15) spawnTreasure();
                 else if (consecutiveHits === 10) {
+                    // Mensaje cuando es por Habilidad
                     triggerPoseidon(8000, "¡INVOCASTE A POSEIDON!");
                     skillPoseidonCount++;
                 }
@@ -520,10 +587,43 @@
             posY = Math.random() * maxY;
             updateSpeed(true); 
 
-            // Verificar Condición de Victoria
             if (level === 20 && previousLevel === 19 && !endlessMode) {
                 triggerVictory();
             }
+        }
+
+        // Lógica al tocar el Pez Globo
+        function catchPuffer(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (!isPlaying || isKingEvent || !pufferActive) return;
+
+            // Rompe la racha (igual que fallar)
+            consecutiveHits = 0; 
+            streakSlowActive = false;
+            skillPoseidonCount = 0;
+            treasure.style.display = 'none'; 
+            updateSpeed();
+
+            // Te quita PUNTOS progresivamente en lugar de segundos
+            let pointsPenalty = level * 25; 
+            score -= pointsPenalty;
+            if (score < 0) score = 0; 
+            scoreDisplay.textContent = score;
+
+            gameBoard.style.backgroundColor = "rgba(255, 0, 0, 0.5)";
+            setTimeout(() => {
+                if(isPlaying && !isKingEvent) gameBoard.style.backgroundColor = "rgba(0, 30, 60, 0.6)";
+            }, 150);
+
+            let rect = gameBoard.getBoundingClientRect();
+            let clickX = (e.clientX || e.touches[0].clientX) - rect.left;
+            let clickY = (e.clientY || e.touches[0].clientY) - rect.top;
+
+            createFloatingMsg(clickX - 15, clickY - 15, `-${pointsPenalty}pts`, "#ff416c");
+            
+            // El pez globo desaparece al tocarlo
+            pufferActive = false;
+            pufferfish.style.display = 'none';
         }
 
         function collectTreasure(e) {
@@ -618,6 +718,9 @@
         target.addEventListener('touchstart', catchShark, {passive: false});
         target.addEventListener('mousedown', catchShark);
         
+        pufferfish.addEventListener('touchstart', catchPuffer, {passive: false});
+        pufferfish.addEventListener('mousedown', catchPuffer);
+
         treasure.addEventListener('touchstart', collectTreasure, {passive: false});
         treasure.addEventListener('mousedown', collectTreasure);
         
@@ -634,6 +737,7 @@
             cancelAnimationFrame(animationFrame);
             
             target.style.display = 'none';
+            pufferfish.style.display = 'none';
             treasure.style.display = 'none';
             tridentEvent.style.display = 'none';
             whale.style.display = 'none';
@@ -666,7 +770,8 @@
                 if (isVictory) {
                     alert(`¡RETIRADA TRIUNFAL!\nTe fuiste en la cima con ${score} puntos y sobreviviste ${totalSecondsPlayed}s.`);
                 } else {
-                    alert(`¡EL MAR HA RECLAMADO LO SUYO!\nSobreviviste ${totalSecondsPlayed}s y lograste ${score} puntos (Nivel ${level}).`);
+                    // NUEVO MENSAJE DE DERROTA
+                    alert(`¡MAS SUERTE LA PROXIMA MARINERO!\nSobreviviste ${totalSecondsPlayed}s y lograste ${score} puntos (Nivel ${level}).`);
                 }
             }
         }
@@ -679,11 +784,19 @@
             timeDisplay.textContent = timeLeft;
             
             if (!poseidonActive && totalSecondsPlayed >= nextPoseidonTime) {
-                if (level >= 5 || totalSecondsPlayed >= 15) triggerPoseidon(); 
+                if (level >= 5 || totalSecondsPlayed >= 15) {
+                    // Mensaje cuando aparece por Suerte
+                    triggerPoseidon(5000, "¡HA APARECIDO POSEIDON!"); 
+                }
                 else nextPoseidonTime++; 
             }
 
-            // Lógica de Spawn de Ballena (Nivel 8+, 15% de probabilidad cada segundo si no hay una activa)
+            // Lógica de Spawn del Pez Globo (Nivel 1+, 20% de probabilidad cada segundo si no hay activo)
+            if (!pufferActive && Math.random() < 0.20) {
+                spawnPufferfish();
+            }
+
+            // Lógica de Spawn de Ballena (Nivel 8+, 15% de probabilidad cada segundo si no hay activa)
             if (level >= 8 && !whaleActive && Math.random() < 0.15) {
                 spawnWhale();
             }
@@ -705,6 +818,7 @@
             streakSlowActive = false;
             isKingEvent = false;
             whaleActive = false;
+            pufferActive = false;
 
             permSpeedDiscount = 0;
             permPenaltyDiscount = 0;
@@ -719,6 +833,7 @@
             startBtn.style.display = 'none';
             target.style.display = 'block';
             whale.style.display = 'none';
+            pufferfish.style.display = 'none';
             
             posX = Math.random() * (gameBoard.clientWidth - 60);
             posY = Math.random() * (gameBoard.clientHeight - 60);
